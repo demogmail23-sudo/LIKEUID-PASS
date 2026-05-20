@@ -21,7 +21,7 @@ def load_accounts():
 # ✅ नया टोकन फंक्शन - 2 स्टेप्स में
 async def fetch_token(session, uid, password):
     try:
-        # STEP 1: UID + Password से सिर्फ access_token लेना है
+        # STEP 1: UID + Password से access_token लेना
         url1 = f"https://uid-pass-to-jwt-token.onrender.com/api/token?uid={uid}&pass={password}"
         
         async with session.get(url1, timeout=10) as res1:
@@ -31,7 +31,7 @@ async def fetch_token(session, uid, password):
             
             data1 = await res1.json()
             
-            # पहली API से access_token निकालो
+            # access_token निकालो
             access_token = None
             if data1.get("success") and "tokens" in data1:
                 access_token = data1["tokens"].get("access_token")
@@ -42,7 +42,7 @@ async def fetch_token(session, uid, password):
                 print(f"No access_token found for {uid}")
                 return None
             
-            # STEP 2: access_token से real jwt_token लेना है
+            # STEP 2: access_token से real jwt_token लेना
             url2 = f"https://zainu-acesstoken.onrender.com/rizer?access_token={access_token}"
             
             async with session.get(url2, timeout=10) as res2:
@@ -63,8 +63,8 @@ async def fetch_token(session, uid, password):
         print(f"Error fetching token for {uid}: {e}")
         return None
 
-# ✅ सारे टोकन लाइव लेना - FIXED (ab region parameter hai)
-async def get_tokens_live(region="ME"):
+# ✅ सारे टोकन लाइव लेना
+async def get_tokens_live():
     accounts = load_accounts()
     tokens = []
     async with aiohttp.ClientSession() as session:
@@ -86,9 +86,11 @@ def create_uid_proto(uid):
     pb.garena = 1
     return pb.SerializeToString()
 
-def create_like_proto(uid):
+# ✅ FIXED: region parameter add kiya
+def create_like_proto(uid, region="ME"):
     pb = like_pb2.like()
     pb.uid = int(uid)
+    pb.region = region  # region set kiya
     return pb.SerializeToString()
 
 def decode_protobuf(binary):
@@ -140,13 +142,13 @@ async def send_request(enc_uid, token):
         print(f"Error in send_request: {e}")
         return None
 
-# ✅ सारे टोकन से लाइक भेजना
-async def send_likes(uid, tokens):
-    enc_uid = encrypt_message(create_like_proto(uid))
+# ✅ FIXED: region parameter pass kiya
+async def send_likes(uid, region, tokens):
+    enc_uid = encrypt_message(create_like_proto(uid, region))
     tasks = [send_request(enc_uid, token) for token in tokens]
     return await asyncio.gather(*tasks)
 
-# ✅ मुख्य एंडपॉइंट - FIXED (pura response)
+# ✅ मुख्य एंडपॉइंट - FULLY FIXED
 @app.route('/like', methods=['GET'])
 def like_handler():
     uid = request.args.get("uid")
@@ -157,7 +159,7 @@ def like_handler():
 
     try:
         # टोकन लो
-        tokens = asyncio.run(get_tokens_live(region))
+        tokens = asyncio.run(get_tokens_live())
         if not tokens:
             return jsonify({"error": "No valid tokens available"}), 401
 
@@ -171,8 +173,8 @@ def like_handler():
         likes_before = int(before_data.get("AccountInfo", {}).get("Likes", 0))
         nickname = before_data.get("AccountInfo", {}).get("PlayerNickname", "Unknown")
 
-        # लाइक भेजो
-        responses = asyncio.run(send_likes(uid, tokens))
+        # ✅ लाइक भेजो - अब region bhi pass ho raha hai
+        responses = asyncio.run(send_likes(uid, region, tokens))
         success_count = sum(1 for r in responses if r == 200)
 
         # बाद की जानकारी लो
@@ -203,3 +205,4 @@ def home():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
+        
